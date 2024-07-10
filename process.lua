@@ -15,22 +15,6 @@ db = db or sqlite3.open_memory()
 
 sqlschema.createTableIfNotExists(db)
 
-local function printTable(t, indent)
-  indent = indent or 0
-  local prefix = string.rep("  ", indent)
-
-  for k, v in pairs(t) do
-    print(string.rep("-", 70))
-    if type(v) == "table" then
-      print(prefix .. tostring(k) .. ": ")
-      printTable(v, indent + 1)
-    else
-      print(prefix .. tostring(k) .. ": " .. tostring(v))
-    end
-  end
-end
-
-
 local function insertSingleMessageInAmmMonitor(msg, source, sourceAmm)
   local valid, err = schemas.inputMessageSchema(msg)
   assert(valid, 'Invalid input transaction data' .. json.encode(err))
@@ -100,9 +84,7 @@ local function insertOrderMessageInDexMonitor(msg, source, sourceAmm)
 end
 
 local function insertTradeMessageInDexMonitor(msg, source, sourceAmm)
-  print('2')
   local valid, err = schemas.dexTradeMessageSchema(msg)
-  print('(DexTrades) Valid: ' .. tostring(valid) .. ' / Error: ' .. tostring(err))
   assert(valid, 'Invalid input transaction data' .. json.encode(err))
 
   local stmt, err = db:prepare [[
@@ -136,7 +118,6 @@ local function insertTradeMessageInDexMonitor(msg, source, sourceAmm)
   })
   stmt:step()
   stmt:reset()
-  print('(7) - trade inserted in db')
 end
 
 
@@ -242,7 +223,6 @@ Handlers.add(
   "AmmUpdateLocalState",
   Handlers.utils.hasMatchingTag("Action", "Order-Confirmation-Monitor"),
   function(msg)
-    print('(1)')
     local stmt = 'SELECT TRUE FROM amm_registry WHERE amm_process = :amm_process'
     local stmt = db:prepare(stmt)
     stmt:bind_names({ amm_process = msg.From })
@@ -276,16 +256,12 @@ Handlers.add(
   "DexTradesUpdateLocalState",
   Handlers.utils.hasMatchingTag("Action", "Dex-Trade-Confirmation-Monitor"),
   function(msg)
-    print('(1) from DexTrades')
     local stmt = 'SELECT TRUE FROM dex_registry WHERE dex_process_id = :dex_process_id'
     local stmt = db:prepare(stmt)
     stmt:bind_names({ dex_process_id = msg.From })
 
     msg.Timestamp = math.floor(msg.Timestamp / 1000)
     local row = sqlschema.queryOne(stmt)
-    -- print('Row: ' .. tostring(row))
-    -- print('Owner: ' .. tostring(Owner))
-    -- print('msg.From: ' .. tostring(msg.From))
     if row or msg.From == Owner then
       insertTradeMessageInDexMonitor(msg, 'message', msg.From)
     end

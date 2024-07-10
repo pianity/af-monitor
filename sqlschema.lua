@@ -301,14 +301,6 @@ function sqlschema.registerAMM(name, processId, token0, token1, discoveredAt)
 end
 
 function sqlschema.registerDEX(name, market, token0, token1)
-  -- Log initial des paramètres
-  print("registerDEX called with parameters:")
-  print("  name:", name)
-  print("  market:", market)
-  print("  token0:", token0)
-  print("  token1:", token1)
-
-  -- Préparation de la déclaration SQL
   local stmt = db:prepare [[
   INSERT OR REPLACE INTO dex_registry (dex_process_id, dex_name, token_base_id, token_quote_id)
   VALUES
@@ -318,7 +310,6 @@ function sqlschema.registerDEX(name, market, token0, token1)
     error("Err (prepare): " .. db:errmsg())
   end
 
-  -- Liaison des noms
   local success = stmt:bind_names({
     dex_process_id = market,
     dex_name = name,
@@ -330,14 +321,12 @@ function sqlschema.registerDEX(name, market, token0, token1)
   end
   print("SQL statement bind_names successful")
 
-  -- Exécution de la déclaration
   local result = stmt:step()
   if not result then
     error("Err (step): " .. stmt:errmsg())
   end
   print("SQL statement executed successfully")
 
-  -- Log de fin et remise à zéro de la déclaration
   print("registerDEX executed successfully")
   print("Err: " .. db:errmsg())
   stmt:reset()
@@ -557,16 +546,6 @@ function sqlschema.registerTopNConsumer(processId, ownerId, quoteToken)
 end
 
 function sqlschema.registerToken(processId, name, denominator, totalSupply, fixedSupply, updatedAt)
-  -- Log initial des paramètres
-  print("registerToken called with parameters:")
-  print("  processId:", processId)
-  print("  name:", name)
-  print("  denominator:", denominator)
-  print("  totalSupply:", totalSupply)
-  print("  fixedSupply:", fixedSupply)
-  print("  updatedAt:", updatedAt)
-
-  -- Préparation de la déclaration SQL
   local stmt = db:prepare [[
     INSERT INTO token_registry (token_process, token_name, denominator, total_supply, fixed_supply, token_updated_at_ts)
     VALUES (:process_id, :token_name, :denominator, :total_supply, :fixed_supply, :token_updated_at_ts)
@@ -582,7 +561,6 @@ function sqlschema.registerToken(processId, name, denominator, totalSupply, fixe
   end
   print("SQL statement prepared successfully")
 
-  -- Liaison des noms
   local success = stmt:bind_names({
     process_id = processId,
     token_name = name,
@@ -596,7 +574,6 @@ function sqlschema.registerToken(processId, name, denominator, totalSupply, fixe
   end
   print("SQL statement bind_names successful")
 
-  -- Exécution de la déclaration
   local result, err = stmt:step()
   stmt:finalize()
   if err then
