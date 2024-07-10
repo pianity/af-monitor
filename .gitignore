@@ -2,3 +2,4 @@ node_modules
 state.yml
 processes.yml
 build/output.lua
+build.sh

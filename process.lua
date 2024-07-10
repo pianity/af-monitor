@@ -81,6 +81,7 @@ local function insertOrderMessage(msg, source, sourceAmm)
   })
   stmt:step()
   stmt:reset()
+  print('Order OK')
 end
 
 local function insertTradeMessage(msg, source, sourceAmm)
@@ -118,6 +119,7 @@ local function insertTradeMessage(msg, source, sourceAmm)
   })
   stmt:step()
   stmt:reset()
+  print('Trade OK')
 end
 
 
