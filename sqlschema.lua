@@ -327,8 +327,6 @@ function sqlschema.registerDEX(name, market, token0, token1)
   end
   print("SQL statement executed successfully")
 
-  print("registerDEX executed successfully")
-  print("Err: " .. db:errmsg())
   stmt:reset()
 end
 

@@ -15,7 +15,7 @@ db = db or sqlite3.open_memory()
 
 sqlschema.createTableIfNotExists(db)
 
-local function insertSingleMessageInAmmMonitor(msg, source, sourceAmm)
+local function insertSwapMessage(msg, source, sourceAmm)
   local valid, err = schemas.inputMessageSchema(msg)
   assert(valid, 'Invalid input transaction data' .. json.encode(err))
 
@@ -50,7 +50,7 @@ local function insertSingleMessageInAmmMonitor(msg, source, sourceAmm)
   stmt:reset()
 end
 
-local function insertOrderMessageInDexMonitor(msg, source, sourceAmm)
+local function insertOrderMessage(msg, source, sourceAmm)
   local valid, err = schemas.dexOrderMessageSchema(msg)
   assert(valid, 'Invalid input transaction data' .. json.encode(err))
 
@@ -83,7 +83,7 @@ local function insertOrderMessageInDexMonitor(msg, source, sourceAmm)
   stmt:reset()
 end
 
-local function insertTradeMessageInDexMonitor(msg, source, sourceAmm)
+local function insertTradeMessage(msg, source, sourceAmm)
   local valid, err = schemas.dexTradeMessageSchema(msg)
   assert(valid, 'Invalid input transaction data' .. json.encode(err))
 
@@ -231,7 +231,7 @@ Handlers.add(
     local row = sqlschema.queryOne(stmt)
 
     if row or msg.From == Owner then
-      insertSingleMessageInAmmMonitor(msg, 'message', msg.From)
+      insertSwapMessage(msg, 'message', msg.From)
     end
   end
 )
@@ -247,7 +247,7 @@ Handlers.add(
     local row = sqlschema.queryOne(stmt)
 
     if row or msg.From == Owner then
-      insertOrderMessageInDexMonitor(msg, 'message', msg.From)
+      insertOrderMessage(msg, 'message', msg.From)
     end
   end
 )
@@ -263,7 +263,7 @@ Handlers.add(
     msg.Timestamp = math.floor(msg.Timestamp / 1000)
     local row = sqlschema.queryOne(stmt)
     if row or msg.From == Owner then
-      insertTradeMessageInDexMonitor(msg, 'message', msg.From)
+      insertTradeMessage(msg, 'message', msg.From)
     end
   end
 )
