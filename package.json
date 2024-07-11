@@ -1,5 +1,5 @@
 {
   "devDependencies": {
-    "aoform": "file:/Users/timothee/Documents/AO/aoform"
+    "aoform": "github:pianity/aoform#arswap"
   }
 }
