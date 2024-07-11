@@ -1,4 +1,9 @@
 {
+  "name": "af-monitor",
+  "scripts": {
+    "build": "./build.sh",
+    "deploy": "aoform apply"
+  },
   "devDependencies": {
     "aoform": "github:pianity/aoform#arswap"
   }
