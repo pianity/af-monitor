@@ -28,11 +28,11 @@ schemas.dexOrderMessageSchema = v.is_table({
     Tags = v.is_table({
         ['Order-Type'] = v.is_string(),
         ['Order-Status'] = v.is_string,
-        ['Order-Side'] = v.is_string(),
         ['Original-Quantity'] = v.is_string(),
         ['Executed-Quantity'] = v.is_string(),
         ['Price'] = v.is_string(),
         ['Wallet'] = v.is_string(),
+        ['Token-Id'] = v.is_string(),
     }, true)
 }, true)
 
@@ -43,14 +43,14 @@ schemas.dexTradeMessageSchema = v.is_table({
     From = v.is_string(),
     Timestamp = v.optional(v.is_number()),
     Tags = v.is_table({
-        ['Original-Quantity'] = v.is_string(),
-        ['Executed-Quantity'] = v.is_string,
+        ['Quantity-Base'] = v.is_string(),
+        ['Quantity-Quote'] = v.is_string,
         ['Price'] = v.is_string(),
         ['Maker-Fees'] = v.is_string(),
         ['Taker-Fees'] = v.is_string(),
         ['Is-Buyer-Taker'] = v.is_string(),
-        ['Order-Id'] = v.is_string(),
-        ['Match-With'] = v.is_string(),
+        ['Maker-Order-Id'] = v.is_string(),
+        ['Taker-Order-Id'] = v.is_string(),
     }, true)
 }, true)
 

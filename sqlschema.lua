@@ -20,34 +20,6 @@ CREATE TABLE IF NOT EXISTS amm_transactions (
 );
 ]]
 
-sqlschema.should_alter_table_add_reserves = function()
-  local stmt = db:prepare("PRAGMA table_info(amm_transactions);")
-  if not stmt then
-    error("Err: " .. db:errmsg())
-  end
-  local hasReserves0 = false
-  local hasReserves1 = false
-  local hasFeePercentage = false
-  for row in stmt:nrows() do
-    if row.name == "reserves_0" then
-      hasReserves0 = true
-    elseif row.name == "reserves_1" then
-      hasReserves1 = true
-    elseif row.name == "fee_percentage" then
-      hasFeePercentage = true
-    end
-  end
-  stmt:reset()
-  return not hasReserves0 or not hasReserves1 or not hasFeePercentage
-end
-
-sqlschema.alter_table_add_reserves = [[
-ALTER TABLE amm_transactions
-  ADD COLUMN reserves_0 INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN reserves_1 INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN fee_percentage TEXT NOT NULL DEFAULT "";
-]]
-
 sqlschema.create_amm_registry_table = [[
 CREATE TABLE IF NOT EXISTS amm_registry (
     amm_process TEXT PRIMARY KEY,
@@ -141,10 +113,6 @@ LEFT JOIN token_registry tq ON tq.token_process = amm_token1
 sqlschema.create_dex_registry_table = [[
 CREATE TABLE IF NOT EXISTS dex_registry (
   dex_process_id               TEXT        PRIMARY KEY,
-  created_at_ts                INTEGER,
-  updated_at_ts                INTEGER,
-  can_sync                     BOOLEAN,
-  type                         TEXT CHECK(type IN ('AMM','DEX')),
   dex_name                     TEXT   ,
   min_price_tick_size          INTEGER,
   min_quantity_tick_size       INTEGER,
@@ -161,40 +129,35 @@ CREATE TABLE IF NOT EXISTS dex_orders (
   source              TEXT NOT NULL CHECK (source IN ('gateway', 'message')),
   block_height        INTEGER     ,
   block_id            TEXT        ,
-  sender              TEXT        ,
   created_at_ts       INTEGER     ,
   updated_at_ts       INTEGER     ,
   type                TEXT CHECK(type IN ('LIMIT', 'LIMIT_MAKER', 'MARKET')) ,
   status              TEXT CHECK(status IN('NEW','PARTIALLY_FILLED','FILLED','CANCELED','FAILED')) ,
-  side                TEXT CHECK(side IN('BUY', 'SELL')) ,
   original_quantity   INTEGER     ,
   executed_quantity   INTEGER     ,
   price               INTEGER,
   wallet              TEXT        ,
-  fk_token_id         TEXT        ,
-  fk_token_pair_id    TEXT        ,
-  FOREIGN KEY (fk_token_id) REFERENCES token_registry(token_process) ON DELETE CASCADE,
-  FOREIGN KEY (fk_token_pair_id) REFERENCES token_registry(token_process) ON DELETE CASCADE
+  token_id            TEXT        ,
+  dex_process_id      TEXT
 );
 ]]
 
 sqlschema.create_dex_trade_history_table = [[
 CREATE TABLE IF NOT EXISTS dex_trades (
   trade_id             TEXT        PRIMARY KEY,
-  source               TEXT        CHECK (source IN ('gateway', 'message')),
+  source TEXT NOT NULL CHECK (source IN ('gateway', 'message')),
   block_height         INTEGER,
   block_id             TEXT,
-  sender               TEXT,
   created_at_ts        INTEGER,
-  updated_at_ts        INTEGER,
-  original_quantity    TEXT,
-  executed_quantity    TEXT,
+  quantity_base        TEXT,
+  quantity_quote       TEXT,
   price                TEXT,
   maker_fees           TEXT,
   taker_fees           TEXT,
   is_buyer_taker       TEXT,
-  order_id             TEXT,
-  match_with           TEXT
+  maker_order_id       TEXT,
+  taker_order_id       TEXT,
+  dex_process_id       TEXT
 );
 ]]
 
@@ -215,8 +178,7 @@ function sqlschema.createTableIfNotExists(db)
   print("create_top_n_subscriptions_table Err: " .. db:errmsg())
 
   db:exec(sqlschema.create_dex_registry_table)
-  local dex_registry_err = db:errmsg()
-  print("create_dex_registry_table Err: " .. dex_registry_err)
+  print("create_dex_registry_table Err: " .. db:errmsg())
 
   db:exec(sqlschema.create_dex_order_history_table)
   print("create_dex_order_history_table Err: " .. db:errmsg())
@@ -226,11 +188,6 @@ function sqlschema.createTableIfNotExists(db)
 
   db:exec(sqlschema.create_table)
   print("create_table Err: " .. db:errmsg())
-
-  if sqlschema.should_alter_table_add_reserves() then
-    db:exec(sqlschema.alter_table_add_reserves)
-    print("alter_table_add_reserves Err: " .. db:errmsg())
-  end
 
   db:exec("DROP VIEW IF EXISTS amm_transactions_view;")
   print("drop_view Err: " .. db:errmsg())
@@ -456,23 +413,20 @@ function sqlschema.getTopNMarketData(token0)
 end
 
 function sqlschema.updateAMMs()
-  sqlschema.registerAMM('RED/BLUE', 'JPdw2YpAXyBgZsLFVM_UOS7c5CGuBzBX3XXyK0YtA8A',
-    '9lhjozsW3b6IGplE-0Ls9-XM0TMnjXb3mgT1Sf4VYfs', 'HXuL26YnN3376Stw7V67xj4Va693uob0xrCgF3HRCds', 1712737395)
+  sqlschema.registerAMM('YEL-RED', 'ef12zgwizuAcSlwJjKpCZDNjiqsZZ7ba0jBMMvKujkU',
+    'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 1712737395)
 end
 
 function sqlschema.updateDEXs()
-  sqlschema.registerDEX('YING/YANG', 'jwc8PLAlYCi2G1BwBonfGO-gfPcThz4iWFWUrvFpilA',
-    'QDlXiiTeOtuZiyQdCb5uyNRcp_c7FP4T6xz3eHYiEFg', 'owveDxsDZUNnHGz3ld_6cq1qwnIKTn5MOn4z_YVBUT0')
+  sqlschema.registerDEX('Yellow/Red', 'AeiDjVxlzPzX87mSbQ2ktK_egC3hRnIJW4pFK5O0jgk',
+    'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM')
 end
 
 function sqlschema.updateTokens()
-  -- Amm Tokens
-  sqlschema.registerToken('9lhjozsW3b6IGplE-0Ls9-XM0TMnjXb3mgT1Sf4VYfs', 'RED', 12, 1000000000000, true, 1712737395)
-  sqlschema.registerToken('HXuL26YnN3376Stw7V67xj4Va693uob0xrCgF3HRCds', 'BLUE', 12, 1000000000000, true, 1712737395)
-
-  -- Dex Tokens
-  sqlschema.registerToken('QDlXiiTeOtuZiyQdCb5uyNRcp_c7FP4T6xz3eHYiEFg', 'YING', 12, 1000000000000, true, 1712737395)
-  sqlschema.registerToken('owveDxsDZUNnHGz3ld_6cq1qwnIKTn5MOn4z_YVBUT0', 'YANG', 12, 1000000000000, true, 1712737395)
+  sqlschema.registerToken('er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Yellow', 12, 1000000000000000000, true,
+    1712737395)
+  sqlschema.registerToken('Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 'Red', 12, 1000000000000000000, true,
+    1712737395)
 end
 
 function sqlschema.getIndicators(timestampFrom, timestampTo, ammProcess)
