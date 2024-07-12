@@ -194,14 +194,14 @@ function sqlschema.createTableIfNotExists(db)
   db:exec(sqlschema.create_transactions_view)
   print("create_transactions_view Err: " .. db:errmsg())
 
-  sqlschema.updateTokens()
-  print("updateTokens Err: " .. db:errmsg())
+  -- sqlschema.updateTokens()
+  -- print("updateTokens Err: " .. db:errmsg())
 
-  sqlschema.updateAMMs()
-  print("updateAMMs Err: " .. db:errmsg())
+  -- sqlschema.updateAMMs()
+  -- print("updateAMMs Err: " .. db:errmsg())
 
-  sqlschema.updateDEXs()
-  print("updateDEXs Err: " .. db:errmsg())
+  -- sqlschema.updateDEXs()
+  -- print("updateDEXs Err: " .. db:errmsg())
 end
 
 function sqlschema.queryMany(stmt)
@@ -407,22 +407,22 @@ function sqlschema.getTopNMarketData(token0)
   return sqlschema.queryMany(stmt)
 end
 
-function sqlschema.updateAMMs()
-  sqlschema.registerAMM('YEL-RED', 'ef12zgwizuAcSlwJjKpCZDNjiqsZZ7ba0jBMMvKujkU',
-    'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 1712737395)
-end
+-- function sqlschema.updateAMMs()
+--   sqlschema.registerAMM('YEL-RED', 'ef12zgwizuAcSlwJjKpCZDNjiqsZZ7ba0jBMMvKujkU',
+--     'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 1712737395)
+-- end
 
-function sqlschema.updateDEXs()
-  sqlschema.registerDEX('Yellow/Red', 'AeiDjVxlzPzX87mSbQ2ktK_egC3hRnIJW4pFK5O0jgk',
-    'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM')
-end
+-- function sqlschema.updateDEXs()
+--   sqlschema.registerDEX('Yellow/Red', 'AeiDjVxlzPzX87mSbQ2ktK_egC3hRnIJW4pFK5O0jgk',
+--     'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM')
+-- end
 
-function sqlschema.updateTokens()
-  sqlschema.registerToken('er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Yellow', 12, 1000000000000000000, true,
-    1712737395)
-  sqlschema.registerToken('Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 'Red', 12, 1000000000000000000, true,
-    1712737395)
-end
+-- function sqlschema.updateTokens()
+--   sqlschema.registerToken('er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Yellow', 12, 1000000000000000000, true,
+--     1712737395)
+--   sqlschema.registerToken('Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 'Red', 12, 1000000000000000000, true,
+--     1712737395)
+-- end
 
 function sqlschema.getIndicators(timestampFrom, timestampTo, ammProcess)
   local stmt = db:prepare([[
