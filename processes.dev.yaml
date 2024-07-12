@@ -1,11 +1,11 @@
-- name: dexi-monitor-test-prod-v3
+- name: arswap-monitor-test-v1
   file: build/output.lua
   prerun: reset-modules.lua
   scheduler: _GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA
-  module: GYrbbe0VbHim_7Hi6zrOpHQXrSQz07XNtwCnfbFo2I0
+  module: u1Ju_X8jiuq4rX9Nh-ZGRQuYQZgV2MKLMT3CZsykk54
   tags:
     - name: Process-Type
-      value: Dexi-Aggregator-Test
+      value: Arswap-Aggregator-Test
     - name: Cron-Interval
       value: 10-minute
     - name: Cron-Tag-Action
