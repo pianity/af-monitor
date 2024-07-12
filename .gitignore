@@ -1,3 +1,9 @@
 node_modules
-state.yml
-processes.yml
+
+state.yaml
+state.local.yaml
+
+processes.yaml
+processes.local.yaml
+
+build/output.lua

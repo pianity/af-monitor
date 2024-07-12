@@ -4,7 +4,7 @@ local json = require("json")
 local intervals = require("intervals")
 local candles = require "candles"
 local stats = require "stats"
-local schemas = require "schemas"
+local insert = require "insert"
 local sqlite3 = require("lsqlite3")
 local sqlschema = require("sqlschema")
 local indicators = require("indicators")
@@ -12,59 +12,17 @@ local topNConsumers = require("top-n-consumers")
 
 db = db or sqlite3.open_memory()
 
+
 sqlschema.createTableIfNotExists(db)
 
---
-
-OFFCHAIN_FEED_PROVIDER = 'P6i7xXWuZtuKJVJYNwEqduj0s8R_G4wZJ38TB5Knpy4'
-TOKEN = ao.env.Process.Tags["Base-Token"]
-AMM = ao.env.Process.Tags["Monitor-For"]
-
-local function insertSingleMessage(msg, source, sourceAmm)
-  local valid, err = schemas.inputMessageSchema(msg)
-  assert(valid, 'Invalid input transaction data' .. json.encode(err))
-
-  local stmt, err = db:prepare [[
-    REPLACE INTO amm_transactions (
-      id, source, block_height, block_id, sender, created_at_ts,
-      to_token, from_token, from_quantity, to_quantity, fee, amm_process,
-      reserves_
-    ) VALUES (:id, :source, :block_height, :block_id, :sender, :created_at_ts,
-              :to_token, :from_token, :from_quantity, :to_quantity, :fee, :amm_process);
-  ]]
-
-  if not stmt then
-    error("Failed to prepare SQL statement: " .. db:errmsg())
+function DebugTable(tablename)
+  assert(type(tablename) == 'string', 'Table name is required of type string');
+  local stmt = 'SELECT * FROM ' .. tablename
+  local rows = {}
+  for row in db:nrows(stmt) do
+    table.insert(rows, row)
   end
-
-  stmt:bind_names({
-    id = msg.Id,
-    source = source,
-    block_height = msg['Block-Height'],
-    block_id = msg['Block-Id'] or '',
-    sender = msg.recipient or '',
-    created_at_ts = msg.Timestamp,
-    to_token = msg.Tags['To-Token'],
-    from_token = msg.Tags['From-Token'],
-    from_quantity = tonumber(msg.Tags['From-Quantity']),
-    to_quantity = tonumber(msg.Tags['To-Quantity']),
-    fee = tonumber(msg.Tags['Fee']),
-    amm_process = sourceAmm
-  })
-
-  stmt:step()
-  stmt:reset()
-end
-
-
-function debugTable()
-  local stmt = db:prepare [[
-    SELECT * FROM amm_transactions ORDER BY created_at_ts LIMIT 100;
-  ]]
-  if not stmt then
-    error("Failed to prepare SQL statement: " .. db:errmsg())
-  end
-  return sqlschema.queryMany(stmt)
+  return rows
 end
 
 local function findPriceAroundTimestamp(targetTimestampBefore, ammProcessId)
@@ -127,15 +85,6 @@ Handlers.add(
   end
 )
 
-
-function startOfDayUTC(currentTimestamp)
-  local utcDateTable = os.date("!*t", currentTimestamp)
-  utcDateTable.hour = 0
-  utcDateTable.min = 0
-  utcDateTable.sec = 0
-  return os.time(utcDateTable)
-end
-
 Handlers.add(
   "GetCandles",
   Handlers.utils.hasMatchingTag("Action", "Get-Candles"),
@@ -156,7 +105,7 @@ Handlers.add(
 )
 
 Handlers.add(
-  "UpdateLocalState",
+  "AmmUpdateLocalState",
   Handlers.utils.hasMatchingTag("Action", "Order-Confirmation-Monitor"),
   function(msg)
     local stmt = 'SELECT TRUE FROM amm_registry WHERE amm_process = :amm_process'
@@ -165,8 +114,42 @@ Handlers.add(
 
     msg.Timestamp = math.floor(msg.Timestamp / 1000)
     local row = sqlschema.queryOne(stmt)
+
     if row or msg.From == Owner then
-      insertSingleMessage(msg, 'message', msg.From)
+      insert.ammTransaction(msg, 'MESSAGE', msg.From)
+    end
+  end
+)
+
+Handlers.add(
+  "DexOrdersUpdateLocalState",
+  Handlers.utils.hasMatchingTag("Action", "Dex-Order-Confirmation-Monitor"),
+  function(msg)
+    local stmt = 'SELECT TRUE FROM dex_registry WHERE dex_process_id = :dex_process_id'
+    local stmt = db:prepare(stmt)
+    stmt:bind_names({ dex_process_id = msg.From })
+    msg.Timestamp = math.floor(msg.Timestamp / 1000)
+    local row = sqlschema.queryOne(stmt)
+
+    if row or msg.From == Owner then
+      insert.dexOrder(msg, 'MESSAGE')
+    end
+  end
+)
+
+Handlers.add(
+  "DexTradesUpdateLocalState",
+  Handlers.utils.hasMatchingTag("Action", "Dex-Trade-Confirmation-Monitor"),
+  function(msg)
+    local stmt = 'SELECT TRUE FROM dex_registry WHERE dex_process_id = :dex_process_id'
+    local stmt = db:prepare(stmt)
+    stmt:bind_names({ dex_process_id = msg.From })
+
+    msg.Timestamp = math.floor(msg.Timestamp / 1000)
+    local row = sqlschema.queryOne(stmt)
+    if row or msg.From == Owner then
+      insert.dexTrade(msg, 'MESSAGE')
+      -- TODO: Update orders on trade (executed_quantity, status)
     end
   end
 )
@@ -181,6 +164,19 @@ Handlers.add(
       ['Payload'] = 'Registered-AMMs',
       Target = msg.From,
       Data = json.encode(sqlschema.getRegisteredAMMs())
+    })
+  end
+)
+
+Handlers.add(
+  "GetRegisteredDEXs",
+  Handlers.utils.hasMatchingTag("Action", "Get-Registered-DEXs"),
+  function(msg)
+    ao.send({
+      ['App-Name'] = 'Dexi',
+      ['Payload'] = 'Registered-DEXs',
+      Target = msg.From,
+      Data = json.encode(sqlschema.getRegisteredDEXs())
     })
   end
 )
@@ -221,18 +217,18 @@ Handlers.add(
 )
 
 
-Handlers.add(
-  "ReceiveOffchainFeed", -- handler name
-  Handlers.utils.hasMatchingTag("Action", "Receive-Offchain-Feed"),
-  function(msg)
-    if msg.From == OFFCHAIN_FEED_PROVIDER then
-      local data = json.decode(msg.Data)
-      for _, transaction in ipairs(data) do
-        insertSingleMessage(transaction, 'gateway', transaction.Tags['AMM'])
-      end
-    end
-  end
-)
+-- Handlers.add(
+--   "ReceiveOffchainFeed", -- handler name
+--   Handlers.utils.hasMatchingTag("Action", "Receive-Offchain-Feed"),
+--   function(msg)
+--     if msg.From == OFFCHAIN_FEED_PROVIDER then
+--       local data = json.decode(msg.Data)
+--       for _, transaction in ipairs(data) do
+--         insertSwapMessage(transaction, 'GATEWAY', transaction.Tags['AMM'])
+--       end
+--     end
+--   end
+-- )
 
 
 Handlers.add(
@@ -242,7 +238,7 @@ Handlers.add(
     local stmt = db:prepare [[
       SELECT MAX(block_height) AS max_height
       FROM amm_transactions
-      WHERE source = 'gateway' AND amm_process = :amm;
+      WHERE source = 'GATEWAY' AND amm_process = :amm;
     ]]
 
     stmt:bind_names({ amm = msg.Tags.AMM })
@@ -269,18 +265,20 @@ Handlers.add(
     local now = math.floor(msg.Timestamp / 1000)
     local currentHour = math.floor(msg.Timestamp / 3600000)
 
-    if currentHour > LastTriggeredHour then
-      LastTriggeredHour = currentHour
+    -- TODO: Implement data streaming
 
-      indicators.dispatchIndicatorsForAllAMMs(now)
-      local outmsg = ao.send({
-        Target = ao.id,
-        Action = 'Dexi-Update-Tick',
-        OK = 'true'
-      })
-    end
+    -- if currentHour > LastTriggeredHour then
+    --   LastTriggeredHour = currentHour
 
-    topNConsumers.dispatchMarketData(now)
+    --   indicators.dispatchIndicatorsForAllAMMs(now)
+    --   ao.send({
+    --     Target = ao.id,
+    --     Action = 'Dexi-Update-Tick',
+    --     OK = 'true'
+    --   })
+    -- end
+
+    -- topNConsumers.dispatchMarketData(now)
   end
 )
 
@@ -355,74 +353,74 @@ Handlers.add(
   end
 )
 
-Handlers.add(
-  "CreditNotice",
-  Handlers.utils.hasMatchingTag("Action", "Credit-Notice"),
-  function(msg)
-    if msg.From == 'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc' then
-      sqlschema.updateBalance(msg.Tags.Sender, msg.From, tonumber(msg.Tags.Quantity), true)
-    end
-  end
-)
+-- Handlers.add(
+--   "CreditNotice",
+--   Handlers.utils.hasMatchingTag("Action", "Credit-Notice"),
+--   function(msg)
+--     if msg.From == 'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc' then
+--       sqlschema.updateBalance(msg.Tags.Sender, msg.From, tonumber(msg.Tags.Quantity), true)
+--     end
+--   end
+-- )
 
 
 
-Handlers.add(
-  "DumpTableToCSV",
-  Handlers.utils.hasMatchingTag("Action", "Dump-Table-To-CSV"),
-  function(msg)
-    local stmt = db:prepare [[
-      SELECT *
-      FROM amm_transactions;
-    ]]
+-- Handlers.add(
+--   "DumpTableToCSV",
+--   Handlers.utils.hasMatchingTag("Action", "Dump-Table-To-CSV"),
+--   function(msg)
+--     local stmt = db:prepare [[
+--       SELECT *
+--       FROM amm_transactions;
+--     ]]
 
-    local rows = {}
-    local row = stmt:step()
-    while row do
-      table.insert(rows, row)
-      row = stmt:step()
-    end
+--     local rows = {}
+--     local row = stmt:step()
+--     while row do
+--       table.insert(rows, row)
+--       row = stmt:step()
+--     end
 
-    stmt:reset()
+--     stmt:reset()
 
-    local csvHeader =
-    "id,source,block_height,block_id,from,timestamp,is_buy,price,volume,to_token,from_token,from_quantity,to_quantity,fee,amm_process\n"
-    local csvData = csvHeader
+--     local csvHeader =
+--     "id,source,block_height,block_id,from,timestamp,is_buy,price,volume,to_token,from_token,from_quantity,to_quantity,fee,amm_process\n"
+--     local csvData = csvHeader
 
-    for _, row in ipairs(rows) do
-      local rowData = string.format("%s,%s,%d,%s,%s,%d,%d,%.8f,%.8f,%s,%s,%.8f,%.8f,%.8f,%s\n",
-        row.id, row.source, row.block_height, row.block_id, row["from"], row["timestamp"],
-        row.is_buy, row.price, row.volume, row.to_token, row.from_token, row.from_quantity,
-        row.to_quantity, row.fee, row.amm_process)
-      csvData = csvData .. rowData
-    end
+--     for _, row in ipairs(rows) do
+--       local rowData = string.format("%s,%s,%d,%s,%s,%d,%d,%.8f,%.8f,%s,%s,%.8f,%.8f,%.8f,%s\n",
+--         row.id, row.source, row.block_height, row.block_id, row["from"], row["timestamp"],
+--         row.is_buy, row.price, row.volume, row.to_token, row.from_token, row.from_quantity,
+--         row.to_quantity, row.fee, row.amm_process)
+--       csvData = csvData .. rowData
+--     end
 
-    ao.send({
-      Target = msg.From,
-      Data = csvData
-    })
-  end
-)
+--     ao.send({
+--       Target = msg.From,
+--       Data = csvData
+--     })
+--   end
+-- )
 
 
-function Trusted(msg)
-  local mu = "fcoN_xJeisVsPXA-trzVAuIiqO3ydLQxM-L4XbrQKzY"
-  -- return false if trusted
-  if msg.Owner == mu then
-    return false
-  end
-  if msg.From == msg.Owner then
-    return false
-  end
-  return true
-end
+-- function Trusted(msg)
+--   local mu = "UuwjYemwjUQoAnnV-lEYyD1sINqHLbn0OQmwqRqEIYc"
+--   -- return false if trusted
+--   if msg.Owner == mu then
+--     return false
+--   end
+--   if msg.From == msg.Owner then
+--     return false
+--   end
+--   return true
+-- end
 
-Handlers.prepend("qualify message",
-  Trusted,
-  function(msg)
-    print("This Msg is not trusted!")
-  end
-)
+-- Handlers.prepend("qualify message",
+--   Trusted,
+--   function(msg)
+--     print("This Msg is not trusted!")
+--   end
+-- )
 
 
 -- Handlers.add(

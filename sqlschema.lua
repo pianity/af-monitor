@@ -3,7 +3,7 @@ local sqlschema = {}
 sqlschema.create_table = [[
 CREATE TABLE IF NOT EXISTS amm_transactions (
     id TEXT PRIMARY KEY,
-    source TEXT NOT NULL CHECK (source IN ('gateway', 'message')),
+    source TEXT NOT NULL CHECK (source IN ('GATEWAY', 'MESSAGE')),
     block_height INTEGER NOT NULL,
     block_id TEXT,
     sender TEXT NOT NULL,
@@ -14,38 +14,10 @@ CREATE TABLE IF NOT EXISTS amm_transactions (
     to_quantity INT NOT NULL,
     fee INT INT NULL,
     amm_process TEXT NOT NULL,
-    reserves_0 TEXT NOT NULL DEFAULT "",
-    reserves_1 TEXT NOT NULL DEFAULT "",
+    reserves_0 INTEGER NOT NULL,
+    reserves_1 INTEGER NOT NULL,
     fee_percentage TEXT NOT NULL DEFAULT ""
 );
-]]
-
-sqlschema.should_alter_table_add_reserves = function()
-  local stmt = db:prepare("PRAGMA table_info(amm_transactions);")
-  if not stmt then
-    error("Err: " .. db:errmsg())
-  end
-  local hasReserves0 = false
-  local hasReserves1 = false
-  local hasFeePercentage = false
-  for row in stmt:nrows() do
-    if row.name == "reserves_0" then
-      hasReserves0 = true
-    elseif row.name == "reserves_1" then
-      hasReserves1 = true
-    elseif row.name == "fee_percentage" then
-      hasFeePercentage = true
-    end
-  end
-  stmt:reset()
-  return not hasReserves0 or not hasReserves1 or not hasFeePercentage
-end
-
-sqlschema.alter_table_add_reserves = [[
-ALTER TABLE amm_transactions
-  ADD COLUMN reserves_0 TEXT NOT NULL DEFAULT "",
-  ADD COLUMN reserves_1 TEXT NOT NULL DEFAULT "",
-  ADD COLUMN fee_percentage TEXT NOT NULL DEFAULT "";
 ]]
 
 sqlschema.create_amm_registry_table = [[
@@ -138,41 +110,98 @@ LEFT JOIN token_registry t0 ON t0.token_process = amm_token0
 LEFT JOIN token_registry tq ON tq.token_process = amm_token1
 ]]
 
+sqlschema.create_dex_registry_table = [[
+CREATE TABLE IF NOT EXISTS dex_registry (
+  dex_process_id          TEXT      PRIMARY KEY,
+  dex_name                TEXT,
+  min_price_tick_size     INTEGER,
+  min_quantity_tick_size  INTEGER,
+  maker_fee_rate          INTEGER,
+  taker_fee_rate          INTEGER,
+  token_base_id           TEXT,
+  token_quote_id          TEXT
+);
+]]
+
+sqlschema.create_dex_order_history_table = [[
+CREATE TABLE IF NOT EXISTS dex_orders (
+  order_id            TEXT      PRIMARY KEY,
+  source              TEXT      NOT NULL CHECK (source IN ('GATEWAY', 'MESSAGE')),
+  block_height        INTEGER,
+  block_id            TEXT,
+  created_at_ts       INTEGER,
+  updated_at_ts       INTEGER,
+  type                TEXT      CHECK(type IN ('LIMIT', 'LIMIT_MAKER', 'MARKET')) ,
+  status              TEXT      CHECK(status IN ('NEW','PARTIALLY_FILLED','FILLED','CANCELED','FAILED')) ,
+  original_quantity   INTEGER,
+  executed_quantity   INTEGER,
+  price               INTEGER,
+  wallet              TEXT,
+  token_id            TEXT,
+  dex_process_id      TEXT
+);
+]]
+
+sqlschema.create_dex_trade_history_table = [[
+CREATE TABLE IF NOT EXISTS dex_trades (
+  trade_id             TEXT        PRIMARY KEY,
+  source TEXT NOT NULL CHECK (source IN ('GATEWAY', 'MESSAGE')),
+  block_height         INTEGER,
+  block_id             TEXT,
+  created_at_ts        INTEGER,
+  quantity_base        TEXT,
+  quantity_quote       TEXT,
+  price                TEXT,
+  maker_fees           TEXT,
+  taker_fees           TEXT,
+  is_buyer_taker       TEXT,
+  maker_order_id       TEXT,
+  taker_order_id       TEXT,
+  dex_process_id       TEXT
+);
+]]
+
 function sqlschema.createTableIfNotExists(db)
-  db:exec(sqlschema.create_table)
-
-  if sqlschema.should_alter_table_add_reserves() then
-    db:exec(sqlschema.alter_table_add_reserves)
-  end
-
-  db:exec("DROP VIEW IF EXISTS amm_transactions_view;")
-  print("Err: " .. db:errmsg())
+  db:exec(sqlschema.create_token_registry_table)
+  print("create_token_registry_table Err: " .. db:errmsg())
 
   db:exec(sqlschema.create_amm_registry_table)
-  print("Err: " .. db:errmsg())
-
-  db:exec(sqlschema.create_transactions_view)
-  print("Err: " .. db:errmsg())
+  print("create_amm_registry_table Err: " .. db:errmsg())
 
   db:exec(sqlschema.create_balances_table)
-  print("Err: " .. db:errmsg())
+  print("create_balances_table Err: " .. db:errmsg())
 
   db:exec(sqlschema.create_subscriptions_table)
-  print("Err: " .. db:errmsg())
+  print("create_subscriptions_table Err: " .. db:errmsg())
 
   db:exec(sqlschema.create_top_n_subscriptions_table)
-  print("Err: " .. db:errmsg())
+  print("create_top_n_subscriptions_table Err: " .. db:errmsg())
 
-  db:exec(sqlschema.create_token_registry_table)
-  print("Err: " .. db:errmsg())
+  db:exec(sqlschema.create_dex_registry_table)
+  print("create_dex_registry_table Err: " .. db:errmsg())
 
-  sqlschema.updateAMMs()
-  sqlschema.updateTokens()
-end
+  db:exec(sqlschema.create_dex_order_history_table)
+  print("create_dex_order_history_table Err: " .. db:errmsg())
 
-function sqlschema.dropAndRecreateTableIfOwner(db)
-  db:exec("DROP TABLE IF EXISTS amm_transactions;")
-  sqlschema.createTableIfNotExists()
+  db:exec(sqlschema.create_dex_trade_history_table)
+  print("create_dex_trade_history_table Err: " .. db:errmsg())
+
+  db:exec(sqlschema.create_table)
+  print("create_table Err: " .. db:errmsg())
+
+  db:exec("DROP VIEW IF EXISTS amm_transactions_view;")
+  print("drop_view Err: " .. db:errmsg())
+  db:exec(sqlschema.create_transactions_view)
+  print("create_transactions_view Err: " .. db:errmsg())
+
+  -- sqlschema.updateTokens()
+  -- print("updateTokens Err: " .. db:errmsg())
+
+  -- sqlschema.updateAMMs()
+  -- print("updateAMMs Err: " .. db:errmsg())
+
+  -- sqlschema.updateDEXs()
+  -- print("updateDEXs Err: " .. db:errmsg())
 end
 
 function sqlschema.queryMany(stmt)
@@ -223,8 +252,42 @@ function sqlschema.registerAMM(name, processId, token0, token1, discoveredAt)
   stmt:reset()
 end
 
+function sqlschema.registerDEX(name, market, token0, token1)
+  local stmt = db:prepare [[
+  INSERT OR REPLACE INTO dex_registry (dex_process_id, dex_name, token_base_id, token_quote_id)
+  VALUES
+    (:dex_process_id, :dex_name, :token_base_id, :token_quote_id)
+  ]]
+  if not stmt then
+    error("Err (prepare): " .. db:errmsg())
+  end
+
+  local success = stmt:bind_names({
+    dex_process_id = market,
+    dex_name = name,
+    token_base_id = token0,
+    token_quote_id = token1,
+  })
+  if not success then
+    error("Err (bind_names): " .. stmt:errmsg())
+  end
+  print("SQL statement bind_names successful")
+
+  local result = stmt:step()
+  if not result then
+    error("Err (step): " .. stmt:errmsg())
+  end
+  print("SQL statement executed successfully")
+
+  stmt:reset()
+end
+
 function sqlschema.getRegisteredAMMs()
   return sqlschema.rawQuery("SELECT * FROM amm_registry")
+end
+
+function sqlschema.getRegisteredDEXs()
+  return sqlschema.rawQuery("SELECT * FROM dex_registry")
 end
 
 function sqlschema.getQuoteTokens()
@@ -339,32 +402,27 @@ function sqlschema.getTopNMarketData(token0)
 
   stmt:bind_names({
     token0 = token0,
-    pricePrecision = PRICE_PRECISION
+    -- pricePrecision = PRICE_PRECISION
   })
   return sqlschema.queryMany(stmt)
 end
 
-function sqlschema.updateAMMs()
-  sqlschema.registerAMM('TRUNK/AOCRED', 'vn5lUv8OaevTb45iI_qykad_d9MP69kuYg5mZW1zCHE',
-    'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc', 'OT9qTE2467gcozb2g8R6D6N3nQS94ENcaAIJfUzHCww', 1712737395)
-  sqlschema.registerAMM('0rbit/AOCRED', '2bKo3vwB1Mo5TItmxuUQzZ11JgKauU_n2IZO1G13AIk',
-    'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc', 'BUhZLMwQ6yZHguLtJYA5lLUa9LQzLXMXRfaq9FVcPJc', 1712737395)
-  sqlschema.registerAMM('BARK/AOCRED', 'U3Yy3MQ41urYMvSmzHsaA4hJEDuvIm-TgXvSm-wz-X0',
-    'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc', '8p7ApPZxC_37M06QHVejCQrKsHbcJEerd3jWNkDUWPQ', 1712737395)
-  sqlschema.registerAMM('AFT/AOCRED', 'DCQJwfEQCD-OQYmfgNH4Oh6uGo9eQJbEn6WbNvtrI_k',
-    'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc', 'SpzpFLkqPGvr5ZFZPbvyAtizthmrJ13lL4VBQIBL0dg', 1712737395)
-  sqlschema.registerAMM('EXP/AOCRED', 'IMcN3R14yThfHzgbYzBDuuSpzmow7zGyBHRE3Gwrtsk',
-    'Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc', 'aYrCboXVSl1AXL9gPFe3tfRxRf0ZmkOXH65mKT0HHZw', 1712737395)
-end
+-- function sqlschema.updateAMMs()
+--   sqlschema.registerAMM('YEL-RED', 'ef12zgwizuAcSlwJjKpCZDNjiqsZZ7ba0jBMMvKujkU',
+--     'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 1712737395)
+-- end
 
-function sqlschema.updateTokens()
-  sqlschema.registerToken('OT9qTE2467gcozb2g8R6D6N3nQS94ENcaAIJfUzHCww', 'TRUNK', 3, 34198, false, 1712737395)
-  sqlschema.registerToken('8p7ApPZxC_37M06QHVejCQrKsHbcJEerd3jWNkDUWPQ', 'BARK', 3, 201047011, false, 1712737395)
-  sqlschema.registerToken('SpzpFLkqPGvr5ZFZPbvyAtizthmrJ13lL4VBQIBL0dg', 'AFT', 12, 10000, false, 1712737395)
-  sqlschema.registerToken('BUhZLMwQ6yZHguLtJYA5lLUa9LQzLXMXRfaq9FVcPJc', '0rbit', 12, 100109630, false, 1712737395)
-  sqlschema.registerToken('aYrCboXVSl1AXL9gPFe3tfRxRf0ZmkOXH65mKT0HHZw', 'EXP', 6, 2782410, false, 1716217288)
-  sqlschema.registerToken('Sa0iBLPNyJQrwpTTG-tWLQU-1QeUAJA73DdxGGiKoJc', 'AOCRED', 3, 2782410, false, 1716217288)
-end
+-- function sqlschema.updateDEXs()
+--   sqlschema.registerDEX('Yellow/Red', 'AeiDjVxlzPzX87mSbQ2ktK_egC3hRnIJW4pFK5O0jgk',
+--     'er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM')
+-- end
+
+-- function sqlschema.updateTokens()
+--   sqlschema.registerToken('er9E2ydIb24wGW00ZcVwV6V9jyXVEjQr5rsIV40nwCE', 'Yellow', 12, 1000000000000000000, true,
+--     1712737395)
+--   sqlschema.registerToken('Eb5Si_xx64vKXM29M5v1BzJgFn7rUEVrqjM2egXSsaM', 'Red', 12, 1000000000000000000, true,
+--     1712737395)
+-- end
 
 function sqlschema.getIndicators(timestampFrom, timestampTo, ammProcess)
   local stmt = db:prepare([[
@@ -448,7 +506,9 @@ function sqlschema.registerToken(processId, name, denominator, totalSupply, fixe
   if not stmt then
     error("Failed to prepare SQL statement for registering token: " .. db:errmsg())
   end
-  stmt:bind_names({
+  print("SQL statement prepared successfully")
+
+  local success = stmt:bind_names({
     process_id = processId,
     token_name = name,
     denominator = denominator,
@@ -456,11 +516,17 @@ function sqlschema.registerToken(processId, name, denominator, totalSupply, fixe
     fixed_supply = fixedSupply,
     token_updated_at_ts = updatedAt
   })
+  if not success then
+    error("Err (bind_names): " .. stmt:errmsg())
+  end
+  print("SQL statement bind_names successful")
+
   local result, err = stmt:step()
   stmt:finalize()
   if err then
     error("Err: " .. db:errmsg())
   end
+  print("registerToken executed successfully")
 end
 
 function sqlschema.updateTokenSupply(processId, totalSupply, fixedSupply, updatedAt)
