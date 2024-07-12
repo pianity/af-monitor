@@ -61,11 +61,11 @@ local function insertOrderMessage(msg, source)
 
   local stmt = db:prepare [[
     REPLACE INTO dex_orders (
-      order_id, source, block_height, block_id, created_at_ts,
+      order_id, source, block_height, block_id, created_at_ts, updated_at_ts,
       type, status, original_quantity, executed_quantity, price, wallet,
       token_id, dex_process_id
     ) VALUES (
-      :order_id, :source, :block_height, :block_id, :created_at_ts,
+      :order_id, :source, :block_height, :block_id, :created_at_ts, :updated_at_ts,
       :type, :status, :original_quantity, :executed_quantity, :price, :wallet,
       :token_id, :dex_process_id
     );
@@ -74,13 +74,14 @@ local function insertOrderMessage(msg, source)
     print("Failed to prepare SQL statement: " .. db:errmsg())
   end
   stmt:bind_names({
-    order_id = msg.Id,
+    order_id = msg.Tags['Order-Id'] or msg.Tags['Pushed-For'] or msg.Id,
     source = source,
     block_height = msg['Block-Height'],
     block_id = msg['Block-Id'] or '',
     created_at_ts = msg.Timestamp,
-    type = msg.Tags['Order-Type'],
-    status = msg.Tags['Order-Status'],
+    updated_at_ts = msg.Timestamp,
+    type = string.upper(msg.Tags['Order-Type']),
+    status = string.upper(msg.Tags['Order-Status']),
     original_quantity = msg.Tags['Original-Quantity'],
     executed_quantity = msg.Tags['Executed-Quantity'],
     price = msg.Tags['Price'],
@@ -237,7 +238,7 @@ Handlers.add(
     local row = sqlschema.queryOne(stmt)
 
     if row or msg.From == Owner then
-      insertSwapMessage(msg, 'message', msg.From)
+      insertSwapMessage(msg, 'MESSAGE', msg.From)
     end
   end
 )
@@ -253,7 +254,7 @@ Handlers.add(
     local row = sqlschema.queryOne(stmt)
 
     if row or msg.From == Owner then
-      insertOrderMessage(msg, 'message')
+      insertOrderMessage(msg, 'MESSAGE')
     end
   end
 )
@@ -269,7 +270,8 @@ Handlers.add(
     msg.Timestamp = math.floor(msg.Timestamp / 1000)
     local row = sqlschema.queryOne(stmt)
     if row or msg.From == Owner then
-      insertTradeMessage(msg, 'message')
+      insertTradeMessage(msg, 'MESSAGE')
+      -- TODO: Update orders on trade (executed_quantity, status)
     end
   end
 )
@@ -344,7 +346,7 @@ Handlers.add(
 --     if msg.From == OFFCHAIN_FEED_PROVIDER then
 --       local data = json.decode(msg.Data)
 --       for _, transaction in ipairs(data) do
---         insertSwapMessage(transaction, 'gateway', transaction.Tags['AMM'])
+--         insertSwapMessage(transaction, 'GATEWAY', transaction.Tags['AMM'])
 --       end
 --     end
 --   end
@@ -358,7 +360,7 @@ Handlers.add(
     local stmt = db:prepare [[
       SELECT MAX(block_height) AS max_height
       FROM amm_transactions
-      WHERE source = 'gateway' AND amm_process = :amm;
+      WHERE source = 'GATEWAY' AND amm_process = :amm;
     ]]
 
     stmt:bind_names({ amm = msg.Tags.AMM })

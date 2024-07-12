@@ -3,7 +3,7 @@ local sqlschema = {}
 sqlschema.create_table = [[
 CREATE TABLE IF NOT EXISTS amm_transactions (
     id TEXT PRIMARY KEY,
-    source TEXT NOT NULL CHECK (source IN ('gateway', 'message')),
+    source TEXT NOT NULL CHECK (source IN ('GATEWAY', 'MESSAGE')),
     block_height INTEGER NOT NULL,
     block_id TEXT,
     sender TEXT NOT NULL,
@@ -112,32 +112,32 @@ LEFT JOIN token_registry tq ON tq.token_process = amm_token1
 
 sqlschema.create_dex_registry_table = [[
 CREATE TABLE IF NOT EXISTS dex_registry (
-  dex_process_id               TEXT        PRIMARY KEY,
-  dex_name                     TEXT   ,
-  min_price_tick_size          INTEGER,
-  min_quantity_tick_size       INTEGER,
-  maker_fee_rate               INTEGER,
-  taker_fee_rate               INTEGER,
-  token_base_id                TEXT   ,
-  token_quote_id               TEXT
+  dex_process_id          TEXT      PRIMARY KEY,
+  dex_name                TEXT,
+  min_price_tick_size     INTEGER,
+  min_quantity_tick_size  INTEGER,
+  maker_fee_rate          INTEGER,
+  taker_fee_rate          INTEGER,
+  token_base_id           TEXT,
+  token_quote_id          TEXT
 );
 ]]
 
 sqlschema.create_dex_order_history_table = [[
 CREATE TABLE IF NOT EXISTS dex_orders (
-  order_id            TEXT       PRIMARY KEY,
-  source              TEXT NOT NULL CHECK (source IN ('gateway', 'message')),
-  block_height        INTEGER     ,
-  block_id            TEXT        ,
-  created_at_ts       INTEGER     ,
-  updated_at_ts       INTEGER     ,
-  type                TEXT CHECK(type IN ('LIMIT', 'LIMIT_MAKER', 'MARKET')) ,
-  status              TEXT CHECK(status IN('NEW','PARTIALLY_FILLED','FILLED','CANCELED','FAILED')) ,
-  original_quantity   INTEGER     ,
-  executed_quantity   INTEGER     ,
+  order_id            TEXT      PRIMARY KEY,
+  source              TEXT      NOT NULL CHECK (source IN ('GATEWAY', 'MESSAGE')),
+  block_height        INTEGER,
+  block_id            TEXT,
+  created_at_ts       INTEGER,
+  updated_at_ts       INTEGER,
+  type                TEXT      CHECK(type IN ('LIMIT', 'LIMIT_MAKER', 'MARKET')) ,
+  status              TEXT      CHECK(status IN ('NEW','PARTIALLY_FILLED','FILLED','CANCELED','FAILED')) ,
+  original_quantity   INTEGER,
+  executed_quantity   INTEGER,
   price               INTEGER,
-  wallet              TEXT        ,
-  token_id            TEXT        ,
+  wallet              TEXT,
+  token_id            TEXT,
   dex_process_id      TEXT
 );
 ]]
@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS dex_orders (
 sqlschema.create_dex_trade_history_table = [[
 CREATE TABLE IF NOT EXISTS dex_trades (
   trade_id             TEXT        PRIMARY KEY,
-  source TEXT NOT NULL CHECK (source IN ('gateway', 'message')),
+  source TEXT NOT NULL CHECK (source IN ('GATEWAY', 'MESSAGE')),
   block_height         INTEGER,
   block_id             TEXT,
   created_at_ts        INTEGER,
@@ -202,11 +202,6 @@ function sqlschema.createTableIfNotExists(db)
 
   sqlschema.updateDEXs()
   print("updateDEXs Err: " .. db:errmsg())
-end
-
-function sqlschema.dropAndRecreateTableIfOwner(db)
-  db:exec("DROP TABLE IF EXISTS amm_transactions;")
-  sqlschema.createTableIfNotExists()
 end
 
 function sqlschema.queryMany(stmt)

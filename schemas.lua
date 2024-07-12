@@ -26,6 +26,7 @@ schemas.dexOrderMessageSchema = v.is_table({
     From = v.is_string(),
     Timestamp = v.optional(v.is_number()),
     Tags = v.is_table({
+        ['Order-Id'] = v.optional(v.is_string()),
         ['Order-Type'] = v.is_string(),
         ['Order-Status'] = v.is_string,
         ['Original-Quantity'] = v.is_string(),
