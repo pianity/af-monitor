@@ -1,7 +1,17 @@
-local schemas = require('schemas')
+local sqlite3 = require('lsqlite3')
 local json = require('json')
 
+local schemas = require('schemas')
+
 local insert = {}
+
+local function getDBStepResult(status)
+    if status == sqlite3.DONE then
+        return 'OK'
+    else
+        return 'ERROR: ' .. db:errmsg()
+    end
+end
 
 function insert.ammTransaction(msg, source, sourceAmm)
     local valid, err = schemas.ammInputMessageSchema(msg)
@@ -38,8 +48,9 @@ function insert.ammTransaction(msg, source, sourceAmm)
         reserves_1 = tonumber(msg.Tags['Reserve-Quote'])
     })
 
-    stmt:step()
+    local status = stmt:step()
     stmt:reset()
+    print('Insert AMM Transaction ' .. getDBStepResult(status))
 end
 
 function insert.dexOrder(msg, source)
@@ -76,9 +87,9 @@ function insert.dexOrder(msg, source)
         token_id = msg.Tags['Token-Id'],
         dex_process_id = msg.Tags.From
     })
-    stmt:step()
+    local status = stmt:step()
     stmt:reset()
-    print('Order OK')
+    print('Insert DEX Order ' .. getDBStepResult(status))
 end
 
 function insert.dexTrade(msg, source)
@@ -118,9 +129,9 @@ function insert.dexTrade(msg, source)
         taker_order_id = msg.Tags['Taker-Order-Id'],
         dex_process_id = msg.Tags.From
     })
-    stmt:step()
+    local status = stmt:step()
     stmt:reset()
-    print('Trade OK')
+    print('Insert DEX Trade ' .. getDBStepResult(status))
 end
 
 return insert;
